@@ -1,0 +1,7 @@
+{
+  "name": "KawaiiGPT RU",
+  "description": "Милый и умный чат-бот в аниме-стиле на базе Gemini, полностью на русском языке.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
