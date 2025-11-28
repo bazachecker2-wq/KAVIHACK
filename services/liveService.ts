@@ -1,7 +1,11 @@
 
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
-import { HACKER_INSTRUCTION, SYSTEM_INSTRUCTION } from "../constants";
+import { 
+  HACKER_INSTRUCTION_RU, HACKER_INSTRUCTION_EN, 
+  SYSTEM_INSTRUCTION_RU, SYSTEM_INSTRUCTION_EN 
+} from "../constants";
 import { createPcmBlob, base64ToUint8Array, decodeAudioData } from "../utils/audioUtils";
+import { AppLanguage } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -24,7 +28,7 @@ export class LiveSessionManager {
     this.onClose = onClose;
   }
 
-  async connect(isHackerMode: boolean) {
+  async connect(isHackerMode: boolean, language: AppLanguage) {
     // 1. Setup Audio Contexts
     this.inputContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     this.outputContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -32,7 +36,12 @@ export class LiveSessionManager {
     this.outputNode.connect(this.outputContext.destination);
 
     // 2. Connect to Gemini Live
-    const instruction = isHackerMode ? HACKER_INSTRUCTION : SYSTEM_INSTRUCTION;
+    let instruction;
+    if (isHackerMode) {
+      instruction = language === 'ru' ? HACKER_INSTRUCTION_RU : HACKER_INSTRUCTION_EN;
+    } else {
+      instruction = language === 'ru' ? SYSTEM_INSTRUCTION_RU : SYSTEM_INSTRUCTION_EN;
+    }
     
     // Using a promise wrapper to ensure we have the session before sending data
     let resolveSession: (s: any) => void;

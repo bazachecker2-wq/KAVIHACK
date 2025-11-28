@@ -1,13 +1,14 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, ImagePlus, Sparkles, Trash2, Settings, X, Loader2, Globe, FileCode, Terminal, Server, Mic, MicOff, ShieldAlert, Cpu, Key } from 'lucide-react';
+import { Send, ImagePlus, Sparkles, Trash2, Settings, X, Loader2, Globe, FileCode, Terminal, Server, Mic, MicOff, ShieldAlert, Cpu, Key, Shield, Eye, EyeOff, Radio, LayoutDashboard, Copy, Repeat, Eraser } from 'lucide-react';
 import { streamUnifiedResponse } from './services/unifiedService';
 import { LiveSessionManager } from './services/liveService';
 import { Message, Role, KawaiiConfig, AvatarEmotion, AiProvider } from './types';
-import { THEMES, DEFAULT_CONFIG, AVAILABLE_MODELS } from './constants';
+import { THEMES, DEFAULT_CONFIG, AVAILABLE_MODELS, TRANSLATIONS } from './constants';
 import ChatBubble from './components/ChatBubble';
 import KawaiiAvatar from './components/KawaiiAvatar';
 import McpManager from './components/McpManager';
+import PentestDashboard from './components/PentestDashboard';
 
 export default function App() {
   // State
@@ -24,11 +25,14 @@ export default function App() {
   const [isStreamingText, setIsStreamingText] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
-  // Initialize config with local storage if available could be added here
   const [config, setConfig] = useState<KawaiiConfig>(DEFAULT_CONFIG);
   
   const [showSettings, setShowSettings] = useState(false);
   const [showMcpManager, setShowMcpManager] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
 
   // Live Mode State
   const [isLiveActive, setIsLiveActive] = useState(false);
@@ -38,6 +42,13 @@ export default function App() {
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Env Debug State
+  const [showEnvKey, setShowEnvKey] = useState(false);
+  const systemApiKey = process.env.API_KEY || '';
+
+  // Translations
+  const t = TRANSLATIONS[config.language];
 
   // Determine current visual theme
   const themeStyles = config.mode === 'ssh' ? THEMES.terminal : THEMES[config.themeColor];
@@ -60,6 +71,45 @@ export default function App() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  // Context Menu Logic
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  // HIVE MIND AUTO-PILOT LOOP
+  useEffect(() => {
+    if (!config.isAutoPilot || config.mode !== 'ssh' || isLoading || messages.length === 0) return;
+
+    const lastMsg = messages[messages.length - 1];
+    
+    // Check if the last message was from the MODEL and did NOT complete the mission
+    if (lastMsg.role === Role.MODEL) {
+      if (lastMsg.text.includes('[MISSION_COMPLETE]')) {
+        // Stop auto-pilot
+        setConfig(prev => ({ ...prev, isAutoPilot: false }));
+        return;
+      }
+      
+      if (lastMsg.text.includes('[AWAITING_NEXT_PHASE]') || !lastMsg.text.includes('[MISSION_COMPLETE]')) {
+        // Wait a brief moment then send the proceed signal
+        const timer = setTimeout(() => {
+           const prompt = config.language === 'ru' 
+             ? "[ANALYST]: Проверить прошлый вывод. [EXECUTOR]: Продолжить выполнение следующего шага пентеста. Если все готово, вывести [MISSION_COMPLETE]." 
+             : "[ANALYST]: Analyze previous output. [EXECUTOR]: Proceed to next logical step. If done, output [MISSION_COMPLETE].";
+           sendHiddenMessage(prompt);
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [messages, config.isAutoPilot, config.mode, isLoading, config.language]);
 
   // Cleanup Live Session on unmount
   useEffect(() => {
@@ -90,27 +140,40 @@ export default function App() {
       role: Role.MODEL,
       text: config.mode === 'ssh' 
         ? `Last login: ${new Date().toDateString()} from 192.168.1.1\nWelcome to ${config.sshHost || 'server'}!`
-        : 'Чат очищен! Давай начнем с чистого листа ^_^',
+        : (config.language === 'ru' ? 'Чат очищен! Давай начнем с чистого листа ^_^' : 'Chat cleared! Let\'s start fresh ^_^'),
       timestamp: Date.now()
     }]);
     setShowSettings(false);
+    setConfig(prev => ({ ...prev, isAutoPilot: false }));
   };
 
   const toggleMode = (mode: 'chat' | 'ssh') => {
-    setConfig(prev => ({ ...prev, mode }));
+    setConfig(prev => ({ ...prev, mode, isAutoPilot: false }));
     setMessages(prev => [...prev, {
       id: Date.now().toString(),
       role: Role.MODEL,
       text: mode === 'ssh' 
         ? `**💻 REBOOTING INTO TERMINAL MODE...**\nConnecting to ${config.sshHost || 'localhost'}...\nConnection established.` 
-        : `**🌸 RESTORING KAWAII OS...**\nВозвращаемся в уютный режим!`,
+        : `**🌸 RESTORING KAWAII OS...**\n${config.language === 'ru' ? 'Возвращаемся в уютный режим!' : 'Back to cozy mode!'}`,
       timestamp: Date.now()
     }]);
   };
 
+  const toggleAutoPilot = () => {
+    setConfig(prev => {
+      const newState = !prev.isAutoPilot;
+      if (newState) {
+        // Trigger start message
+        const startMsg = prev.language === 'ru' ? "ИНИЦИАЛИЗАЦИЯ РОЯ. ДОЛОЖИТЬ СТАТУС." : "INITIALIZE HIVE MIND. REPORT STATUS.";
+        setTimeout(() => sendHiddenMessage(startMsg), 100);
+      }
+      return { ...prev, isAutoPilot: newState };
+    });
+  };
+
   const toggleLiveMode = async () => {
     if (config.activeProvider !== 'gemini') {
-       alert("Голосовой режим пока доступен только для моделей Gemini.");
+       alert(config.language === 'ru' ? "Голосовой режим доступен только для Gemini." : "Voice mode is only available for Gemini.");
        return;
     }
 
@@ -126,7 +189,7 @@ export default function App() {
       );
       // Determine if we should be in "Hacker" voice mode based on current mode or settings
       const isHackerVoice = config.mode === 'ssh'; 
-      await liveSessionRef.current.connect(isHackerVoice);
+      await liveSessionRef.current.connect(isHackerVoice, config.language);
     }
   };
 
@@ -137,21 +200,27 @@ export default function App() {
     }));
   };
 
-  const sendMessage = async () => {
-    if ((!inputText.trim() && !selectedImage) || isLoading) return;
+  const sendHiddenMessage = (text: string) => {
+    sendMessageInternal(text, true); 
+  };
+
+  const sendMessageInternal = async (text: string, isAuto: boolean = false) => {
+    if (isLoading) return;
 
     const userMsgId = Date.now().toString();
     const newUserMsg: Message = {
       id: userMsgId,
       role: Role.USER,
-      text: inputText,
+      text: text,
       timestamp: Date.now(),
       image: selectedImage || undefined
     };
 
     setMessages(prev => [...prev, newUserMsg]);
-    setInputText('');
-    setSelectedImage(null);
+    if (!isAuto) {
+      setInputText('');
+      setSelectedImage(null);
+    }
     setIsLoading(true);
 
     const aiMsgId = (Date.now() + 1).toString();
@@ -164,9 +233,7 @@ export default function App() {
 
     try {
       const currentHistory = [...messages, newUserMsg];
-      
-      // Inject MCP context if agents are active
-      const tempConfig = { ...config }; // pass config as is
+      const tempConfig = { ...config };
 
       setIsStreamingText(true);
       
@@ -190,11 +257,15 @@ export default function App() {
           isError: true 
         } : msg
       ));
+      // Stop auto pilot on error
+      if (config.isAutoPilot) setConfig(prev => ({ ...prev, isAutoPilot: false }));
     } finally {
       setIsLoading(false);
       setIsStreamingText(false);
     }
   };
+
+  const sendMessage = () => sendMessageInternal(inputText);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -203,16 +274,55 @@ export default function App() {
     }
   };
 
+  const copyLastMessage = () => {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.text) {
+      navigator.clipboard.writeText(lastMsg.text);
+    }
+  };
+
   return (
     // Fixed h-screen to h-[100dvh] for mobile browser address bar handling
-    <div className={`w-full h-[100dvh] bg-gradient-to-br ${themeStyles.gradient} flex items-center justify-center p-0 md:p-6 overflow-hidden transition-all duration-500`}>
+    <div onContextMenu={handleContextMenu} className={`w-full h-[100dvh] bg-gradient-to-br ${themeStyles.gradient} flex items-center justify-center p-0 md:p-6 overflow-hidden transition-all duration-500`}>
       
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className={`fixed z-[100] min-w-[160px] rounded-lg shadow-xl py-1 border animate-in fade-in zoom-in-95 duration-100 ${config.mode === 'ssh' ? 'bg-gray-900 border-green-500 text-green-500' : 'bg-white border-pink-100 text-gray-700'}`}
+        >
+          <button onClick={handleClearChat} className="w-full text-left px-4 py-2 text-sm hover:bg-black/5 flex items-center gap-2">
+            <Eraser size={14} /> {t.contextClear}
+          </button>
+          <button onClick={() => toggleMode(config.mode === 'chat' ? 'ssh' : 'chat')} className="w-full text-left px-4 py-2 text-sm hover:bg-black/5 flex items-center gap-2">
+            <Repeat size={14} /> {t.contextSwitch}
+          </button>
+          <button onClick={copyLastMessage} className="w-full text-left px-4 py-2 text-sm hover:bg-black/5 flex items-center gap-2">
+            <Copy size={14} /> {t.contextCopy}
+          </button>
+        </div>
+      )}
+
       {/* MCP Manager Modal */}
       {showMcpManager && (
         <McpManager 
           config={config} 
           setConfig={setConfig} 
           onClose={() => setShowMcpManager(false)} 
+        />
+      )}
+
+      {/* Pentest Dashboard Modal */}
+      {showDashboard && (
+        <PentestDashboard 
+           messages={messages}
+           onClose={() => setShowDashboard(false)}
+           onSendCommand={(cmd) => {
+             sendMessageInternal(cmd);
+           }}
+           isAutoPilot={config.isAutoPilot || false}
+           targetHost={config.sshHost || ''}
+           language={config.language}
         />
       )}
 
@@ -230,10 +340,10 @@ export default function App() {
                  
                  <div className="text-center">
                     <div className={`text-2xl font-bold ${config.mode === 'ssh' ? 'text-green-500 font-mono' : 'text-white'}`}>
-                      {config.mode === 'ssh' ? 'RED TEAM OPS' : 'KAWAII LIVE'}
+                      {config.mode === 'ssh' ? 'RED TEAM OPS' : t.liveVoice}
                     </div>
                     <div className={`text-sm uppercase tracking-widest mt-2 ${config.mode === 'ssh' ? 'text-green-800' : 'text-white/60'}`}>
-                      {audioVolume > 5 ? 'Transmitting...' : 'Listening...'}
+                      {audioVolume > 5 ? (config.language === 'ru' ? 'Прием...' : 'Transmitting...') : (config.language === 'ru' ? 'Слушаю...' : 'Listening...')}
                     </div>
                  </div>
               </div>
@@ -269,7 +379,7 @@ export default function App() {
                </h1>
                <div className="flex items-center gap-2">
                  <p className={`text-xs ${config.mode === 'ssh' ? 'text-green-700' : 'text-gray-500'}`}>
-                   {isLoading ? (config.mode === 'ssh' ? 'PROCESSING...' : 'Печатает...') : (isLiveActive ? 'Live Voice' : 'Online')}
+                   {isLoading ? (config.mode === 'ssh' ? t.processing : t.typing) : (isLiveActive ? t.liveVoice : t.online)}
                  </p>
                </div>
              </div>
@@ -282,14 +392,14 @@ export default function App() {
                  <button 
                    onClick={() => setConfig(prev => ({...prev, useSearch: !prev.useSearch}))}
                    className={`p-2 rounded-full transition-all ${config.useSearch ? 'bg-blue-100 text-blue-600' : 'text-gray-400 hover:bg-gray-100'}`}
-                   title="Поиск в Интернете"
+                   title={t.searchOn}
                  >
                    <Globe size={18} />
                  </button>
                  <button 
                    onClick={() => setConfig(prev => ({...prev, usePython: !prev.usePython}))}
                    className={`p-2 rounded-full transition-all ${config.usePython ? 'bg-yellow-100 text-yellow-600' : 'text-gray-400 hover:bg-gray-100'}`}
-                   title="Python Агент"
+                   title={t.pythonOn}
                  >
                    <FileCode size={18} />
                  </button>
@@ -297,15 +407,39 @@ export default function App() {
                  <button 
                    onClick={() => setShowMcpManager(true)}
                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 ${config.mcpAgents.some(a => a.isEnabled) ? 'bg-purple-100 text-purple-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                   title="MCP Агенты"
+                   title={t.manageMcp}
                  >
                    <Server size={14} /> MCP
                  </button>
                </div>
              )}
 
+             {/* DASHBOARD BUTTON (SSH ONLY) */}
+             {config.mode === 'ssh' && (
+               <button
+                 onClick={() => setShowDashboard(true)}
+                 title={t.openDashboard}
+                 className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-bold transition-all mr-2 bg-green-900/20 text-green-400 border-green-800 hover:bg-green-900/50 hover:text-white hover:border-green-500"
+               >
+                 <LayoutDashboard size={14} /> C2 DASHBOARD
+               </button>
+             )}
+
+             {/* HIVE MIND AUTO TOGGLE (SSH ONLY) */}
+             {config.mode === 'ssh' && config.activeProvider === 'gemini' && (
+               <button
+                 onClick={toggleAutoPilot}
+                 title={config.isAutoPilot ? t.stopHive : t.startHive}
+                 className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-bold transition-all mr-2 ${config.isAutoPilot ? 'bg-green-500 text-black border-green-400 animate-pulse' : 'bg-transparent text-green-700 border-green-900 hover:bg-green-900/30'}`}
+               >
+                 <Radio size={14} className={config.isAutoPilot ? 'animate-spin' : ''} />
+                 {config.isAutoPilot ? t.hiveActive : 'HIVE AUTO'}
+               </button>
+             )}
+
              <button 
                 onClick={() => setShowSettings(!showSettings)}
+                title={t.settingsTitle}
                 className={`p-2 rounded-full hover:bg-white/10 transition-colors ${showSettings ? themeStyles.accent : (config.mode === 'ssh' ? 'text-green-700' : 'text-gray-500')}`}
               >
                 <Settings size={22} />
@@ -318,23 +452,39 @@ export default function App() {
           <div className={`absolute top-20 right-0 md:right-6 z-20 w-full md:w-96 ${config.mode === 'ssh' ? 'bg-gray-900 border-green-800 text-green-500' : 'bg-white/95 border-white/50 text-gray-700'} backdrop-blur-xl shadow-xl border p-4 rounded-b-2xl md:rounded-2xl flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200 max-h-[70vh] overflow-y-auto`}>
             
             <div className="flex justify-between items-center mb-1">
-               <h3 className="font-bold text-sm">Панель управления</h3>
+               <h3 className="font-bold text-sm">{t.settingsTitle}</h3>
                <button onClick={() => setShowSettings(false)} className="opacity-50 hover:opacity-100"><X size={16} /></button>
             </div>
             
+            {/* Language Switcher */}
+            <div className="flex gap-2">
+                <button 
+                    onClick={() => setConfig(prev => ({...prev, language: 'ru'}))}
+                    className={`flex-1 py-1 text-xs border rounded ${config.language === 'ru' ? (config.mode === 'ssh' ? 'bg-green-800 text-white' : 'bg-pink-500 text-white') : 'opacity-50'}`}
+                >
+                    Русский
+                </button>
+                <button 
+                    onClick={() => setConfig(prev => ({...prev, language: 'en'}))}
+                    className={`flex-1 py-1 text-xs border rounded ${config.language === 'en' ? (config.mode === 'ssh' ? 'bg-green-800 text-white' : 'bg-pink-500 text-white') : 'opacity-50'}`}
+                >
+                    English
+                </button>
+            </div>
+
             {/* Mode Switcher */}
             <div className={`p-1 rounded-lg flex gap-1 ${config.mode === 'ssh' ? 'bg-black' : 'bg-gray-100'}`}>
                <button 
                  onClick={() => toggleMode('chat')}
                  className={`flex-1 py-1.5 text-xs font-bold rounded-md flex items-center justify-center gap-2 transition-all ${config.mode === 'chat' ? 'bg-white shadow-sm text-pink-500' : 'opacity-50 hover:opacity-100'}`}
                >
-                 <Sparkles size={14} /> Kawaii
+                 <Sparkles size={14} /> {t.modeKawaii}
                </button>
                <button 
                  onClick={() => toggleMode('ssh')}
                  className={`flex-1 py-1.5 text-xs font-bold rounded-md flex items-center justify-center gap-2 transition-all ${config.mode === 'ssh' ? 'bg-green-900 text-green-400' : 'opacity-50 hover:opacity-100'}`}
                >
-                 <Terminal size={14} /> SSH
+                 <Terminal size={14} /> {t.modeSsh}
                </button>
             </div>
 
@@ -369,12 +519,34 @@ export default function App() {
                     <p className="text-[9px] text-yellow-600 mt-1 leading-tight">Key is stored in browser memory only. Not sent to my server.</p>
                  </div>
                )}
+
+               {/* Environment Variable Check */}
+               <div className={`mt-2 p-2 rounded border flex flex-col gap-1 ${config.mode === 'ssh' ? 'bg-black border-green-900' : 'bg-gray-50 border-gray-200'}`}>
+                 <div className="flex items-center justify-between">
+                   <label className="text-[10px] font-bold opacity-60 flex items-center gap-1">
+                     <Shield size={10} /> SYSTEM ENVIRONMENT
+                   </label>
+                   <span className={`text-[10px] font-bold ${systemApiKey ? 'text-green-600' : 'text-red-500'}`}>
+                     {systemApiKey ? t.apiKeyDetected : t.apiKeyMissing}
+                   </span>
+                 </div>
+                 
+                 <div className="flex items-center gap-2 mt-1">
+                    <code className={`text-[10px] flex-1 font-mono truncate p-1 rounded ${config.mode === 'ssh' ? 'bg-green-900/20' : 'bg-gray-100'}`}>
+                      {showEnvKey ? (systemApiKey || 'process.env.API_KEY is undefined') : (systemApiKey ? `${systemApiKey.substring(0,5)}...${systemApiKey.substring(systemApiKey.length - 3)}` : 'No API_KEY in .env')}
+                    </code>
+                    <button onClick={() => setShowEnvKey(!showEnvKey)} className="opacity-50 hover:opacity-100">
+                      {showEnvKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                 </div>
+                 {!systemApiKey && <p className="text-[9px] text-red-500 leading-tight">Create a .env file with API_KEY=...</p>}
+               </div>
             </div>
 
             {config.mode === 'chat' ? (
               <div className="space-y-3 pt-2 border-t border-gray-100">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold opacity-70">Тема оформления</label>
+                  <label className="text-xs font-semibold opacity-70">{t.theme}</label>
                   <div className="flex gap-2">
                     {(['pink', 'purple', 'blue'] as const).map((c) => (
                       <button
@@ -388,12 +560,12 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold opacity-70">Модули</label>
+                  <label className="text-xs font-semibold opacity-70">{t.modules}</label>
                   <button 
                     onClick={() => setShowMcpManager(true)}
                     className="w-full py-2 bg-purple-50 text-purple-600 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-purple-100 hover:bg-purple-100 transition-colors"
                   >
-                    <Server size={14} /> Manage MCP Agents
+                    <Server size={14} /> {t.manageMcp}
                   </button>
                 </div>
               </div>
@@ -409,6 +581,23 @@ export default function App() {
                          className="bg-black border border-green-900 rounded px-2 py-1 text-xs text-green-500 font-mono focus:outline-none focus:border-green-500"
                          placeholder="Host (e.g., 192.168.1.5)"
                        />
+                       
+                       <button
+                         onClick={toggleAutoPilot}
+                         className={`w-full py-2 border rounded font-mono text-xs flex items-center justify-center gap-2 ${config.isAutoPilot ? 'bg-green-500 text-black border-green-400 font-bold' : 'border-green-800 text-green-600 hover:bg-green-900/30'}`}
+                       >
+                         <Radio size={14} className={config.isAutoPilot ? 'animate-spin' : ''} />
+                         {config.isAutoPilot ? t.stopHive : t.startHive}
+                       </button>
+                       <button
+                         onClick={() => setShowDashboard(true)}
+                         className="w-full py-2 border border-green-800 rounded font-mono text-xs flex items-center justify-center gap-2 text-green-400 hover:bg-green-900/30 hover:border-green-500 transition-all"
+                       >
+                         <LayoutDashboard size={14} /> {t.openDashboard}
+                       </button>
+                       <p className="text-[9px] text-green-800">
+                         ⚠️ Hive Mind allows autonomous recursive task execution. Use responsibly.
+                       </p>
                     </div>
                  </div>
               </div>
@@ -420,7 +609,7 @@ export default function App() {
               onClick={handleClearChat}
               className={`flex items-center gap-2 p-2 rounded-lg text-sm transition-colors w-full ${config.mode === 'ssh' ? 'text-red-500 hover:bg-red-900/20' : 'text-red-500 hover:bg-red-50'}`}
             >
-              <Trash2 size={16} /> {config.mode === 'ssh' ? 'Purge Logs' : 'Очистить историю'}
+              <Trash2 size={16} /> {config.mode === 'ssh' ? t.purgeLogs : t.clearHistory}
             </button>
           </div>
         )}
@@ -428,7 +617,7 @@ export default function App() {
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-2 scroll-smooth">
           {messages.map((msg) => (
-            <ChatBubble key={msg.id} message={msg} theme={config.themeColor} isTerminalMode={config.mode === 'ssh'} />
+            <ChatBubble key={msg.id} message={msg} theme={config.themeColor} isTerminalMode={config.mode === 'ssh'} language={config.language} />
           ))}
           <div ref={messagesEndRef} />
         </div>
@@ -456,7 +645,7 @@ export default function App() {
             <button 
               onClick={() => config.activeProvider === 'gemini' && fileInputRef.current?.click()}
               className={`p-3 rounded-full transition-colors ${config.activeProvider !== 'gemini' ? 'opacity-30 cursor-not-allowed' : ''} ${config.mode === 'ssh' ? 'text-green-700 hover:bg-green-900/30' : `hover:bg-gray-100 ${themeStyles.accent}`}`}
-              title={config.activeProvider === 'gemini' ? "Добавить картинку" : "Только для Gemini"}
+              title={config.activeProvider === 'gemini' ? "Добавить картинку" : "Image upload only for Gemini"}
             >
               <ImagePlus size={20} />
             </button>
@@ -472,7 +661,7 @@ export default function App() {
              <button 
               onClick={toggleLiveMode}
               className={`p-3 rounded-full transition-all ${config.activeProvider !== 'gemini' ? 'opacity-30 cursor-not-allowed text-gray-400' : (isLiveActive ? 'animate-pulse text-red-500' : 'text-pink-500 hover:bg-pink-100')}`}
-              title={config.activeProvider === 'gemini' ? "Голосовой режим" : "Только для Gemini"}
+              title={config.activeProvider === 'gemini' ? t.liveVoice : "Voice mode only for Gemini"}
             >
               <Mic size={20} />
             </button>
@@ -481,7 +670,7 @@ export default function App() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={config.mode === 'ssh' ? "user@host:~$ type command..." : "Напиши что-нибудь..."}
+              placeholder={config.mode === 'ssh' ? (config.isAutoPilot ? "HIVE MIND ACTIVE - MONITORING..." : t.placeholderSsh) : t.placeholderChat}
               rows={1}
               className={`flex-1 bg-transparent border-none focus:ring-0 resize-none py-3 px-2 max-h-32 font-medium ${config.mode === 'ssh' ? 'text-green-500 placeholder:text-green-800 font-mono' : 'text-gray-700 placeholder:text-gray-400'}`}
               style={{ minHeight: '44px' }}
@@ -489,6 +678,7 @@ export default function App() {
 
             <button
               onClick={sendMessage}
+              title="Send Message"
               disabled={(!inputText.trim() && !selectedImage) || isLoading}
               className={`
                 p-3 rounded-2xl transition-all duration-300 shadow-lg flex items-center justify-center
@@ -503,9 +693,9 @@ export default function App() {
           </div>
           
           <div className="text-center mt-2 flex justify-center gap-3">
-             {config.useSearch && config.activeProvider === 'gemini' && <span className="text-[10px] flex items-center gap-1 text-blue-400"><Globe size={10} /> Search ON</span>}
-             {config.usePython && config.activeProvider === 'gemini' && <span className="text-[10px] flex items-center gap-1 text-yellow-500"><FileCode size={10} /> Python ON</span>}
-             {config.mcpAgents.some(a => a.isEnabled) && <span className="text-[10px] flex items-center gap-1 text-purple-500"><Server size={10} /> MCP ACTIVE</span>}
+             {config.useSearch && config.activeProvider === 'gemini' && <span className="text-[10px] flex items-center gap-1 text-blue-400"><Globe size={10} /> {t.searchOn}</span>}
+             {config.usePython && config.activeProvider === 'gemini' && <span className="text-[10px] flex items-center gap-1 text-yellow-500"><FileCode size={10} /> {t.pythonOn}</span>}
+             {config.isAutoPilot && <span className="text-[10px] flex items-center gap-1 text-green-500 animate-pulse"><Radio size={10} /> {t.hiveActive}</span>}
           </div>
         </div>
       </div>

@@ -36,6 +36,7 @@ export interface ChatState {
 }
 
 export type AppMode = 'chat' | 'ssh';
+export type HackerAgentRole = 'SCOUT' | 'BREAKER' | 'ANALYST' | 'EXECUTOR' | 'SYSTEM';
 
 export interface MCPAgent {
   id: string;
@@ -49,6 +50,7 @@ export interface MCPAgent {
 export type AvatarEmotion = 'neutral' | 'happy' | 'thinking' | 'speaking' | 'hacker' | 'sleeping';
 
 export type AiProvider = 'gemini' | 'openai' | 'mistral' | 'kimi' | 'claude' | 'custom';
+export type AppLanguage = 'ru' | 'en';
 
 export interface ModelDefinition {
   id: string;
@@ -61,10 +63,12 @@ export interface KawaiiConfig {
   aiName: string;
   userName: string;
   themeColor: 'pink' | 'purple' | 'blue';
+  language: AppLanguage;
   useSearch: boolean;
   usePython: boolean;
   mode: AppMode;
   sshHost?: string;
+  isAutoPilot?: boolean; // New flag for Hive Mind automation
   mcpAgents: MCPAgent[];
   
   // Multi-model config

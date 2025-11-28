@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { X, Plus, Github, Server, Trash2, Search, ExternalLink } from 'lucide-react';
 import { MCPAgent, KawaiiConfig } from '../types';
-import { FEATURED_MCP_AGENTS } from '../constants';
+import { FEATURED_MCP_AGENTS, TRANSLATIONS } from '../constants';
 
 interface McpManagerProps {
   config: KawaiiConfig;
@@ -14,6 +14,8 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
   const [activeTab, setActiveTab] = useState<'installed' | 'discover'>('installed');
   const [customRepo, setCustomRepo] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  
+  const t = TRANSLATIONS[config.language];
 
   const toggleAgent = (id: string) => {
     setConfig(prev => ({
@@ -72,9 +74,9 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
         <div className={`p-4 border-b flex items-center justify-between ${config.mode === 'ssh' ? 'border-green-800 bg-gray-950' : 'border-gray-100 bg-gray-50'}`}>
           <div className="flex items-center gap-2">
             <Server size={20} className={config.mode === 'ssh' ? 'text-green-500' : 'text-purple-500'} />
-            <h2 className="font-bold text-lg">MCP Agents Manager</h2>
+            <h2 className="font-bold text-lg">{t.mcpTitle}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-black/10 rounded-full transition-colors">
+          <button onClick={onClose} title="Close" className="p-2 hover:bg-black/10 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -85,13 +87,13 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
             onClick={() => setActiveTab('installed')}
             className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'installed' ? (config.mode === 'ssh' ? 'border-b-2 border-green-500 bg-green-900/20' : 'border-b-2 border-purple-500 bg-purple-50 text-purple-600') : 'opacity-60 hover:bg-gray-50'}`}
           >
-            Installed Agents ({config.mcpAgents.length})
+            {t.mcpInstalled} ({config.mcpAgents.length})
           </button>
           <button 
             onClick={() => setActiveTab('discover')}
             className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'discover' ? (config.mode === 'ssh' ? 'border-b-2 border-green-500 bg-green-900/20' : 'border-b-2 border-purple-500 bg-purple-50 text-purple-600') : 'opacity-60 hover:bg-gray-50'}`}
           >
-            Discover
+            {t.mcpDiscover}
           </button>
         </div>
 
@@ -103,8 +105,8 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
               {config.mcpAgents.length === 0 ? (
                 <div className="text-center py-10 opacity-50">
                   <Server size={48} className="mx-auto mb-3 opacity-20" />
-                  <p>No agents installed.</p>
-                  <button onClick={() => setActiveTab('discover')} className="text-blue-500 hover:underline text-sm mt-2">Find agents to add</button>
+                  <p>{t.mcpNoAgents}</p>
+                  <button onClick={() => setActiveTab('discover')} className="text-blue-500 hover:underline text-sm mt-2">{t.mcpDiscover}</button>
                 </div>
               ) : (
                 config.mcpAgents.map(agent => (
@@ -124,11 +126,12 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => toggleAgent(agent.id)}
+                        title={agent.isEnabled ? "Disable Agent" : "Enable Agent"}
                         className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${agent.isEnabled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'}`}
                       >
                         {agent.isEnabled ? 'ON' : 'OFF'}
                       </button>
-                      <button onClick={() => removeAgent(agent.id)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full">
+                      <button onClick={() => removeAgent(agent.id)} title="Remove Agent" className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full">
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -139,7 +142,7 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
               <div className="pt-4 border-t border-gray-100 mt-4">
                  {!isAdding ? (
                    <button onClick={() => setIsAdding(true)} className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium hover:border-purple-300 hover:text-purple-500 transition-all flex items-center justify-center gap-2">
-                     <Plus size={18} /> Add Custom Repo
+                     <Plus size={18} /> {t.mcpAddCustom}
                    </button>
                  ) : (
                    <form onSubmit={addCustomAgent} className="flex gap-2">
@@ -168,7 +171,7 @@ const McpManager: React.FC<McpManagerProps> = ({ config, setConfig, onClose }) =
                    <p className="text-xs opacity-70">Search GitHub for open-source MCP servers</p>
                 </div>
                 <button onClick={searchGithub} className="bg-black text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-gray-800 transition-colors">
-                  <Search size={14} /> Search GitHub
+                  <Search size={14} /> {t.mcpSearchGithub}
                 </button>
               </div>
 

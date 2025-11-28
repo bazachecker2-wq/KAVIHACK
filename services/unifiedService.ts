@@ -1,7 +1,13 @@
 
 import { Message, KawaiiConfig, StreamResponseResult, Role } from "../types";
 import { streamGeminiResponse } from "./geminiService";
-import { SYSTEM_INSTRUCTION, SSH_INSTRUCTION, PROVIDER_BASE_URLS } from "../constants";
+import { 
+  SYSTEM_INSTRUCTION_EN, 
+  SYSTEM_INSTRUCTION_RU, 
+  SSH_INSTRUCTION_EN, 
+  SSH_INSTRUCTION_RU, 
+  PROVIDER_BASE_URLS 
+} from "../constants";
 
 // Helper to parse OpenAI-compatible SSE stream
 async function* streamOpenAICompat(
@@ -85,9 +91,12 @@ export const streamUnifiedResponse = async (
   }
 
   // 2. Prepare System Instruction
-  const instruction = config.mode === 'ssh' 
-    ? SSH_INSTRUCTION.replace('{{HOST}}', config.sshHost || 'kali-linux')
-    : SYSTEM_INSTRUCTION;
+  let instruction = config.language === 'ru' ? SYSTEM_INSTRUCTION_RU : SYSTEM_INSTRUCTION_EN;
+
+  if (config.mode === 'ssh') {
+    const baseSSH = config.language === 'ru' ? SSH_INSTRUCTION_RU : SSH_INSTRUCTION_EN;
+    instruction = baseSSH.replace('{{HOST}}', config.sshHost || 'kali-linux');
+  }
 
   // 3. Determine Endpoint and Key
   let baseUrl = config.customBaseUrl;

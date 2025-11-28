@@ -1,6 +1,10 @@
 
 import { GoogleGenAI, GenerateContentResponse, Tool } from "@google/genai";
-import { SYSTEM_INSTRUCTION, SSH_INSTRUCTION } from "../constants";
+import { 
+  SYSTEM_INSTRUCTION_RU, SYSTEM_INSTRUCTION_EN, 
+  SSH_INSTRUCTION_RU, SSH_INSTRUCTION_EN, 
+  HIVE_MIND_INSTRUCTION_RU, HIVE_MIND_INSTRUCTION_EN 
+} from "../constants";
 import { Message, Role, KawaiiConfig, GroundingMetadata, StreamResponseResult } from "../types";
 
 // Initialize the API client
@@ -12,10 +16,17 @@ export const streamGeminiResponse = async (
   onChunk: (text: string) => void
 ): Promise<StreamResponseResult> => {
   
-  // Determine System Instruction based on Mode
-  const instruction = config.mode === 'ssh' 
-    ? SSH_INSTRUCTION.replace('{{HOST}}', config.sshHost || 'kali-linux')
-    : SYSTEM_INSTRUCTION;
+  // Determine System Instruction based on Mode and Language
+  let instruction = config.language === 'ru' ? SYSTEM_INSTRUCTION_RU : SYSTEM_INSTRUCTION_EN;
+  
+  if (config.mode === 'ssh') {
+    if (config.isAutoPilot) {
+      instruction = config.language === 'ru' ? HIVE_MIND_INSTRUCTION_RU : HIVE_MIND_INSTRUCTION_EN;
+    } else {
+      const baseSSH = config.language === 'ru' ? SSH_INSTRUCTION_RU : SSH_INSTRUCTION_EN;
+      instruction = baseSSH.replace('{{HOST}}', config.sshHost || 'kali-linux');
+    }
+  }
 
   // Configure Tools
   const tools: Tool[] = [];
@@ -38,7 +49,7 @@ export const streamGeminiResponse = async (
     model: 'gemini-2.5-flash',
     config: {
       systemInstruction: instruction,
-      temperature: config.mode === 'ssh' ? 0.1 : 0.8, // Low temp for SSH precision
+      temperature: config.mode === 'ssh' ? 0.2 : 0.8, // Low temp for SSH precision
       tools: tools.length > 0 ? tools : undefined,
     },
     history: history.slice(0, -1).map(msg => ({
