@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, ImagePlus, Sparkles, Trash2, Settings, X, Loader2, Globe, FileCode, Terminal, Server, Mic, MicOff, ShieldAlert, Cpu } from 'lucide-react';
-import { streamGeminiResponse } from './services/geminiService';
+import { Send, ImagePlus, Sparkles, Trash2, Settings, X, Loader2, Globe, FileCode, Terminal, Server, Mic, MicOff, ShieldAlert, Cpu, Key } from 'lucide-react';
+import { streamUnifiedResponse } from './services/unifiedService';
 import { LiveSessionManager } from './services/liveService';
-import { Message, Role, KawaiiConfig, AvatarEmotion } from './types';
-import { THEMES, DEFAULT_CONFIG, SYSTEM_INSTRUCTION } from './constants';
+import { Message, Role, KawaiiConfig, AvatarEmotion, AiProvider } from './types';
+import { THEMES, DEFAULT_CONFIG, AVAILABLE_MODELS } from './constants';
 import ChatBubble from './components/ChatBubble';
 import KawaiiAvatar from './components/KawaiiAvatar';
 import McpManager from './components/McpManager';
@@ -15,7 +15,7 @@ export default function App() {
     {
       id: 'welcome',
       role: Role.MODEL,
-      text: 'Приветик! Я KawaiiGPT (◕‿◕) \nТеперь у меня есть голосовой режим, поддержка MCP агентов и анимированный аватар! Чем займемся?',
+      text: 'Приветик! Я KawaiiGPT (◕‿◕) \nТеперь я поддерживаю Kimi, Mistral и другие модели! Выбери нужную в настройках!',
       timestamp: Date.now()
     }
   ]);
@@ -24,6 +24,7 @@ export default function App() {
   const [isStreamingText, setIsStreamingText] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
+  // Initialize config with local storage if available could be added here
   const [config, setConfig] = useState<KawaiiConfig>(DEFAULT_CONFIG);
   
   const [showSettings, setShowSettings] = useState(false);
@@ -108,6 +109,11 @@ export default function App() {
   };
 
   const toggleLiveMode = async () => {
+    if (config.activeProvider !== 'gemini') {
+       alert("Голосовой режим пока доступен только для моделей Gemini.");
+       return;
+    }
+
     if (isLiveActive) {
       liveSessionRef.current?.disconnect();
       setIsLiveActive(false);
@@ -122,6 +128,13 @@ export default function App() {
       const isHackerVoice = config.mode === 'ssh'; 
       await liveSessionRef.current.connect(isHackerVoice);
     }
+  };
+
+  const updateApiKey = (provider: AiProvider, key: string) => {
+    setConfig(prev => ({
+      ...prev,
+      apiKeys: { ...prev.apiKeys, [provider]: key }
+    }));
   };
 
   const sendMessage = async () => {
@@ -153,12 +166,11 @@ export default function App() {
       const currentHistory = [...messages, newUserMsg];
       
       // Inject MCP context if agents are active
-      const mcpContext = config.mcpAgents.filter(a => a.isEnabled).map(a => `ACTIVE MCP AGENT: ${a.name} (${a.description})`).join('\n');
       const tempConfig = { ...config }; // pass config as is
 
       setIsStreamingText(true);
       
-      const result = await streamGeminiResponse(currentHistory, tempConfig, (streamedText) => {
+      const result = await streamUnifiedResponse(currentHistory, tempConfig, (streamedText) => {
         setMessages(prev => prev.map(msg => 
           msg.id === aiMsgId ? { ...msg, text: streamedText } : msg
         ));
@@ -170,11 +182,11 @@ export default function App() {
         ));
       }
 
-    } catch (error) {
+    } catch (error: any) {
       setMessages(prev => prev.map(msg => 
         msg.id === aiMsgId ? { 
           ...msg, 
-          text: config.mode === 'ssh' ? 'Error: Connection interrupted.' : 'Ой-ой! Что-то пошло не так... (╥_╥)',
+          text: config.mode === 'ssh' ? `Error: ${error.message}` : `Ой-ой! Ошибка провайдера: ${error.message} (╥_╥)`,
           isError: true 
         } : msg
       ));
@@ -192,7 +204,8 @@ export default function App() {
   };
 
   return (
-    <div className={`w-full h-screen bg-gradient-to-br ${themeStyles.gradient} flex items-center justify-center p-0 md:p-6 overflow-hidden transition-all duration-500`}>
+    // Fixed h-screen to h-[100dvh] for mobile browser address bar handling
+    <div className={`w-full h-[100dvh] bg-gradient-to-br ${themeStyles.gradient} flex items-center justify-center p-0 md:p-6 overflow-hidden transition-all duration-500`}>
       
       {/* MCP Manager Modal */}
       {showMcpManager && (
@@ -250,8 +263,8 @@ export default function App() {
              <div>
                <h1 className={`font-bold text-lg flex items-center gap-2 ${config.mode === 'ssh' ? 'text-green-500' : 'text-gray-800'}`}>
                  {config.mode === 'ssh' ? `SSH: ${config.sshHost}` : config.aiName}
-                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${themeStyles.secondary} ${themeStyles.accent} font-bold tracking-wider`}>
-                   {config.mode === 'ssh' ? 'ROOT' : 'v2.5'}
+                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${themeStyles.secondary} ${themeStyles.accent} font-bold tracking-wider uppercase`}>
+                   {config.activeProvider}
                  </span>
                </h1>
                <div className="flex items-center gap-2">
@@ -263,8 +276,8 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-             {/* Capabilities Toolbar */}
-             {config.mode === 'chat' && (
+             {/* Capabilities Toolbar (Only for Gemini) */}
+             {config.mode === 'chat' && config.activeProvider === 'gemini' && (
                <div className="hidden md:flex bg-white/50 rounded-full p-1 border border-white/50 mr-2 items-center">
                  <button 
                    onClick={() => setConfig(prev => ({...prev, useSearch: !prev.useSearch}))}
@@ -302,11 +315,11 @@ export default function App() {
 
         {/* Settings Panel */}
         {showSettings && (
-          <div className={`absolute top-20 right-0 md:right-6 z-20 w-full md:w-80 ${config.mode === 'ssh' ? 'bg-gray-900 border-green-800 text-green-500' : 'bg-white/95 border-white/50 text-gray-700'} backdrop-blur-xl shadow-xl border p-4 rounded-b-2xl md:rounded-2xl flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200`}>
+          <div className={`absolute top-20 right-0 md:right-6 z-20 w-full md:w-96 ${config.mode === 'ssh' ? 'bg-gray-900 border-green-800 text-green-500' : 'bg-white/95 border-white/50 text-gray-700'} backdrop-blur-xl shadow-xl border p-4 rounded-b-2xl md:rounded-2xl flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200 max-h-[70vh] overflow-y-auto`}>
             
             <div className="flex justify-between items-center mb-1">
                <h3 className="font-bold text-sm">Панель управления</h3>
-               <div className="text-xs uppercase tracking-widest opacity-50">{config.mode === 'ssh' ? 'System Config' : 'Settings'}</div>
+               <button onClick={() => setShowSettings(false)} className="opacity-50 hover:opacity-100"><X size={16} /></button>
             </div>
             
             {/* Mode Switcher */}
@@ -325,8 +338,41 @@ export default function App() {
                </button>
             </div>
 
+            {/* Model Selection */}
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+               <label className="text-xs font-semibold opacity-70">AI Model Provider</label>
+               <div className="grid grid-cols-2 gap-2">
+                  {AVAILABLE_MODELS.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => setConfig(prev => ({ ...prev, activeModelId: m.id, activeProvider: m.provider }))}
+                      className={`text-xs p-2 rounded border text-left ${config.activeModelId === m.id ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'border-transparent hover:bg-gray-50'}`}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+               </div>
+               
+               {/* API Key Input for selected non-Gemini provider */}
+               {config.activeProvider !== 'gemini' && (
+                 <div className="mt-2 bg-yellow-50 p-2 rounded border border-yellow-100">
+                    <label className="text-[10px] font-bold text-yellow-700 flex items-center gap-1 mb-1">
+                      <Key size={10} /> {config.activeProvider.toUpperCase()} API KEY
+                    </label>
+                    <input 
+                      type="password"
+                      value={config.apiKeys[config.activeProvider] || ''}
+                      onChange={(e) => updateApiKey(config.activeProvider, e.target.value)}
+                      placeholder={`sk-...`}
+                      className="w-full text-xs p-1.5 rounded border border-yellow-200 focus:outline-none focus:border-yellow-400"
+                    />
+                    <p className="text-[9px] text-yellow-600 mt-1 leading-tight">Key is stored in browser memory only. Not sent to my server.</p>
+                 </div>
+               )}
+            </div>
+
             {config.mode === 'chat' ? (
-              <div className="space-y-3">
+              <div className="space-y-3 pt-2 border-t border-gray-100">
                 <div className="space-y-2">
                   <label className="text-xs font-semibold opacity-70">Тема оформления</label>
                   <div className="flex gap-2">
@@ -363,10 +409,6 @@ export default function App() {
                          className="bg-black border border-green-900 rounded px-2 py-1 text-xs text-green-500 font-mono focus:outline-none focus:border-green-500"
                          placeholder="Host (e.g., 192.168.1.5)"
                        />
-                       <div className="flex items-center gap-2 text-xs text-green-800">
-                          <Cpu size={12} />
-                          <span>MCP Agents Injected</span>
-                       </div>
                     </div>
                  </div>
               </div>
@@ -410,11 +452,11 @@ export default function App() {
 
           <div className={`flex items-end gap-2 rounded-3xl p-2 shadow-inner border transition-all ${config.mode === 'ssh' ? 'bg-gray-900 border-green-900' : 'bg-white border-gray-100 focus-within:ring-2 focus-within:ring-pink-100'}`}>
             
-            {/* Image Upload */}
+            {/* Image Upload (Gemini Only) */}
             <button 
-              onClick={() => fileInputRef.current?.click()}
-              className={`p-3 rounded-full transition-colors ${config.mode === 'ssh' ? 'text-green-700 hover:bg-green-900/30' : `hover:bg-gray-100 ${themeStyles.accent}`}`}
-              title="Добавить картинку"
+              onClick={() => config.activeProvider === 'gemini' && fileInputRef.current?.click()}
+              className={`p-3 rounded-full transition-colors ${config.activeProvider !== 'gemini' ? 'opacity-30 cursor-not-allowed' : ''} ${config.mode === 'ssh' ? 'text-green-700 hover:bg-green-900/30' : `hover:bg-gray-100 ${themeStyles.accent}`}`}
+              title={config.activeProvider === 'gemini' ? "Добавить картинку" : "Только для Gemini"}
             >
               <ImagePlus size={20} />
             </button>
@@ -426,11 +468,11 @@ export default function App() {
               onChange={handleImageUpload}
             />
 
-            {/* Live Mode Toggle */}
+            {/* Live Mode Toggle (Gemini Only) */}
              <button 
               onClick={toggleLiveMode}
-              className={`p-3 rounded-full transition-all animate-pulse ${config.mode === 'ssh' ? 'text-red-500 hover:bg-red-900/30' : 'text-pink-500 hover:bg-pink-100'}`}
-              title="Голосовой режим"
+              className={`p-3 rounded-full transition-all ${config.activeProvider !== 'gemini' ? 'opacity-30 cursor-not-allowed text-gray-400' : (isLiveActive ? 'animate-pulse text-red-500' : 'text-pink-500 hover:bg-pink-100')}`}
+              title={config.activeProvider === 'gemini' ? "Голосовой режим" : "Только для Gemini"}
             >
               <Mic size={20} />
             </button>
@@ -439,7 +481,7 @@ export default function App() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={config.mode === 'ssh' ? "user@host:~$ type command..." : "Напиши что-нибудь милое..."}
+              placeholder={config.mode === 'ssh' ? "user@host:~$ type command..." : "Напиши что-нибудь..."}
               rows={1}
               className={`flex-1 bg-transparent border-none focus:ring-0 resize-none py-3 px-2 max-h-32 font-medium ${config.mode === 'ssh' ? 'text-green-500 placeholder:text-green-800 font-mono' : 'text-gray-700 placeholder:text-gray-400'}`}
               style={{ minHeight: '44px' }}
@@ -461,8 +503,8 @@ export default function App() {
           </div>
           
           <div className="text-center mt-2 flex justify-center gap-3">
-             {config.useSearch && <span className="text-[10px] flex items-center gap-1 text-blue-400"><Globe size={10} /> Search ON</span>}
-             {config.usePython && <span className="text-[10px] flex items-center gap-1 text-yellow-500"><FileCode size={10} /> Python ON</span>}
+             {config.useSearch && config.activeProvider === 'gemini' && <span className="text-[10px] flex items-center gap-1 text-blue-400"><Globe size={10} /> Search ON</span>}
+             {config.usePython && config.activeProvider === 'gemini' && <span className="text-[10px] flex items-center gap-1 text-yellow-500"><FileCode size={10} /> Python ON</span>}
              {config.mcpAgents.some(a => a.isEnabled) && <span className="text-[10px] flex items-center gap-1 text-purple-500"><Server size={10} /> MCP ACTIVE</span>}
           </div>
         </div>

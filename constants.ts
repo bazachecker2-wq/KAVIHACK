@@ -77,7 +77,34 @@ export const DEFAULT_CONFIG: KawaiiConfig = {
   usePython: true,
   mode: 'chat',
   sshHost: 'kali-linux',
-  mcpAgents: []
+  mcpAgents: [],
+  
+  activeProvider: 'gemini',
+  activeModelId: 'gemini-2.5-flash',
+  apiKeys: {
+    gemini: process.env.API_KEY || '',
+    openai: '',
+    mistral: '',
+    kimi: '',
+    claude: '',
+    custom: ''
+  }
+};
+
+export const AVAILABLE_MODELS = [
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini' },
+  { id: 'gemini-2.0-pro-exp', name: 'Gemini 2.0 Pro', provider: 'gemini' },
+  { id: 'moonshot-v1-8k', name: 'Kimi (Moonshot)', provider: 'kimi' },
+  { id: 'mistral-large-latest', name: 'Mistral Large', provider: 'mistral' },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
+  { id: 'claude-3-5-sonnet-20240620', name: 'Claude 3.5 Sonnet', provider: 'claude' },
+];
+
+export const PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: 'https://api.openai.com/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  kimi: 'https://api.moonshot.cn/v1',
+  claude: 'https://api.anthropic.com/v1', // Note: Often requires proxy for browser
 };
 
 export const FEATURED_MCP_AGENTS = [

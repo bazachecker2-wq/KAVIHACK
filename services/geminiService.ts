@@ -1,15 +1,10 @@
 
 import { GoogleGenAI, GenerateContentResponse, Tool } from "@google/genai";
 import { SYSTEM_INSTRUCTION, SSH_INSTRUCTION } from "../constants";
-import { Message, Role, KawaiiConfig, GroundingMetadata } from "../types";
+import { Message, Role, KawaiiConfig, GroundingMetadata, StreamResponseResult } from "../types";
 
 // Initialize the API client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-export interface StreamResponseResult {
-  text: string;
-  groundingMetadata?: GroundingMetadata;
-}
 
 export const streamGeminiResponse = async (
   history: Message[],

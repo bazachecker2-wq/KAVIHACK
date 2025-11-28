@@ -15,6 +15,11 @@ export interface GroundingMetadata {
   groundingChunks: GroundingChunk[];
 }
 
+export interface StreamResponseResult {
+  text: string;
+  groundingMetadata?: GroundingMetadata;
+}
+
 export interface Message {
   id: string;
   role: Role;
@@ -43,6 +48,15 @@ export interface MCPAgent {
 
 export type AvatarEmotion = 'neutral' | 'happy' | 'thinking' | 'speaking' | 'hacker' | 'sleeping';
 
+export type AiProvider = 'gemini' | 'openai' | 'mistral' | 'kimi' | 'claude' | 'custom';
+
+export interface ModelDefinition {
+  id: string;
+  name: string;
+  provider: AiProvider;
+  contextWindow?: number;
+}
+
 export interface KawaiiConfig {
   aiName: string;
   userName: string;
@@ -52,4 +66,10 @@ export interface KawaiiConfig {
   mode: AppMode;
   sshHost?: string;
   mcpAgents: MCPAgent[];
+  
+  // Multi-model config
+  activeProvider: AiProvider;
+  activeModelId: string;
+  apiKeys: Record<AiProvider, string>;
+  customBaseUrl?: string;
 }
